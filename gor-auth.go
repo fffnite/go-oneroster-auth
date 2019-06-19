@@ -21,12 +21,21 @@ type conf struct {
 	KeyAlg   string
 }
 
-func Login(id, secret string) (string, error) {
-	var conf *conf
+var conf *conf
+
+func init() {
 	err := conf.envs()
-	if err != nil {
-		return "", err
-	}
+	log.Error(err)
+}
+
+func Login(id, secret string) (string, error) {
+	/*
+		var conf *conf
+		err := conf.envs()
+		if err != nil {
+			return "", err
+		}
+	*/
 	db := conf.database()
 	defer db.Close()
 	err := verify(u, p, db)
