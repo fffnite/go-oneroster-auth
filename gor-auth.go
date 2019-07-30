@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	errors "golang.org/x/xerrors"
 	"os"
+	"time"
 )
 
 type conf struct {
@@ -21,14 +22,14 @@ type conf struct {
 	KeyAlg   string
 }
 
-var conf *conf
+var c *conf
 
 func init() {
-	err := conf.envs()
+	err := c.envs()
 	log.Error(err)
 }
 
-func Login(id, secret string) (string, error) {
+func Login(u, p string) (string, error) {
 	/*
 		var conf *conf
 		err := conf.envs()
@@ -36,19 +37,25 @@ func Login(id, secret string) (string, error) {
 			return "", err
 		}
 	*/
-	db := conf.database()
+	db := c.database()
 	defer db.Close()
-	err := verify(u, p, db)
+	err := validateSecret(u, p, db)
 	if err != nil {
 		log.Infof("Bad login: %v", u)
 		//TODO: 401
 		return "", err
 	}
-	t := conf.createToken(u)
+	t, err := c.createToken(u)
+	if err != nil {
+		// review
+		log.Error(err)
+		return "", err
+	}
 	return t, nil
 }
 
 func (c *conf) envs() error {
+	var ok bool
 	c.DBDriver, ok = os.LookupEnv("GOR_AUTH_DBDRIVER")
 	if c.DBDriver == "" || !ok {
 		return errors.New("Unknown Database Driver, set GOR_AUTH_DBDRIVER")
@@ -76,10 +83,6 @@ func (c *conf) envs() error {
 
 func (conf *conf) database() *sql.DB {
 	var c *sql.DB
-	if err != nil {
-		log.Error(err)
-		return c
-	}
 	c, err := sql.Open(conf.DBDriver, conf.DBName)
 	if err != nil {
 		log.Error(err)
@@ -88,31 +91,38 @@ func (conf *conf) database() *sql.DB {
 	return c
 }
 
-func (db *sql.DB) getSecret(id string) (*sql.Result, error) {
-	return sq.
+func getSecret(id string, db *sql.DB) (string, error) {
+	var s string
+	rows, err := sq.
 		Select("client_secret_hash").
 		From("creds").
 		Where("client_id = ?", id).
 		RunWith(db).
-		Exec()
-
+		Query()
+	if err != nil {
+		// todo: placeholder
+		return "", err
+	}
+	rows.Scan(&s)
+	return s, nil
 }
 
 func validateSecret(u, p string, db *sql.DB) error {
-	hash, err := db.getSecret(u)
+	hash, err := getSecret(u, db)
 	if err != nil {
 		return err
 	}
+	h := []byte(hash)
 	b := []byte(p)
-	err := bcrypt.CompareHashAndPassword(hash, b)
+	err = bcrypt.CompareHashAndPassword(h, b)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *conf) createToken() (string, error) {
-	tokenAuth = jwtauth.New(c.KeyAlg, []byte(c.Key), nil)
+func (c *conf) createToken(u string) (string, error) {
+	tokenAuth := jwtauth.New(c.KeyAlg, []byte(c.Key), nil)
 	_, tokenString, err := tokenAuth.Encode(jwt.MapClaims{
 		"aud": u,
 		"exp": time.Now(), // implement
