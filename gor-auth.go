@@ -22,26 +22,22 @@ type conf struct {
 	KeyAlg   string
 }
 
-var c *conf
+var c conf
 
 func init() {
 	err := c.envs()
-	log.Error(err)
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 func Login(u, p string) (string, error) {
-	/*
-		var conf *conf
-		err := conf.envs()
-		if err != nil {
-			return "", err
-		}
-	*/
 	db := c.database()
 	defer db.Close()
 	err := validateSecret(u, p, db)
 	if err != nil {
 		log.Infof("Bad login: %v", u)
+		log.Error(err)
 		//TODO: 401
 		return "", err
 	}
@@ -103,7 +99,12 @@ func getSecret(id string, db *sql.DB) (string, error) {
 		// todo: placeholder
 		return "", err
 	}
-	rows.Scan(&s)
+	for rows.Next() {
+		err = rows.Scan(&s)
+		if err != nil {
+			log.Error(err)
+		}
+	}
 	return s, nil
 }
 
