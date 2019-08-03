@@ -1,5 +1,6 @@
 // Package providing oauth2 authentication
 // for go-oneroster-api service
+
 package gorauth
 
 import (
@@ -124,10 +125,10 @@ func validateSecret(u, p string, db *sql.DB) error {
 
 func (c *conf) createToken(u string) (string, error) {
 	tokenAuth := jwtauth.New(c.KeyAlg, []byte(c.Key), nil)
-	_, tokenString, err := tokenAuth.Encode(jwt.MapClaims{
-		"aud": u,
-		"exp": time.Now(), // implement
-	})
+	t := jwt.MapClaims{"aud": u}
+	jwtauth.SetIssuedNow(t)
+	jwtauth.SetExpiryIn(t, (time.Duration(30 * time.Minute)))
+	_, tokenString, err := tokenAuth.Encode(t)
 	if err != nil {
 		return "", err
 	}
